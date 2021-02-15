@@ -17,7 +17,7 @@ from lantz.core import Action, DictFeat, Driver
 #     from . import XPS_Q8_drivers
 # except SystemError:
 #     import XPS_Q8_drivers
-from . import XPS_Q8_drivers
+from lantz.drivers.newport import XPS_Q8_drivers
 
 
 class XPSQ8(Driver):

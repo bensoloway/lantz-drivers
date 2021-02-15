@@ -1,7 +1,4 @@
-print(f'the name:{__name__}')
-from .agilis import Agilis
-
-from lantzdrivers.ni.ni_motion_controller import NIDAQMotionController, NIDAQAxis
+from lantz.drivers.ni.ni_motion_controller import NIDAQMotionController, NIDAQAxis
 from lantz.core import Driver, Feat, Action
 from lantz import Q_
 #from nspyre.widgets import feat
