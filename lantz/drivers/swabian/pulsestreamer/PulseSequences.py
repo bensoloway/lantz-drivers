@@ -330,9 +330,9 @@ class Pulses(Driver):
             aom_lag = \
                 [(self.aom_lag, [], *self.laseron)]
             readout_high = \
-                [(self.readout_time, [self.channel_dict["gate1"],self.channel_dict["gate2"]], *self.laseron)]
-            readout_low = \
                 [(self.readout_time, [self.channel_dict["gate1"]], *self.laseron)]
+            readout_low = \
+                [(self.readout_time, [self.channel_dict["gate2"]], *self.laseron)]
             init = \
                 [(self.laser_time, [], *self.laseron)]
             aom_buffer = \
