@@ -1,7 +1,7 @@
 import numpy as np
 import pandas as pd
 from lantz.driver import Driver
-from lantz.drivers.swabian.pulsestreamer.lib.pulse_streamer_grpc import PulseStreamer
+from lantz.drivers.swabian.pulsestreamer.grpc.pulse_streamer_grpc import PulseStreamer
 from lantz import Q_
 #from nspyre.widgets.rangespace import RangeDict
 from lantz import Action, Feat, DictFeat, ureg
