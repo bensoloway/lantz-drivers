@@ -2,6 +2,7 @@ import numpy as np
 import pandas as pd
 from lantz.driver import Driver
 from lantz.drivers.swabian.pulsestreamer.grpc.pulse_streamer_grpc import PulseStreamer
+from lantz.drivers.swabian.pulsestreamer.sequence import Sequence
 from lantz import Q_
 #from nspyre.widgets.rangespace import RangeDict
 from lantz import Action, Feat, DictFeat, ureg
@@ -15,8 +16,10 @@ class Pulses(Driver):
     #ctr2 -> gate2 (ideally gate 1)
     #ctr3 -> gate1 (ideally gate 1 & 2)
     #default_digi_dict = {"laser": "ch0", "offr_laser": "ch1", "EOM": "ch4", "CTR": "ch5", "switch": "ch6", "gate": "ch7", "": None}
+    default_ana_dict = {"laser": 0}
     default_digi_dict = {"gate0": 0, "gate1": 1, "gate2": 2, "gate3":3, "vaunix": 7}
     rev_dict = {0: "gate0", 1: "gate1", 2: "gate2", 3: "gate3", 7: "vaunix"}
+    gates_dict = {"gate0": 0, "gate1": 1, "gate2": 2, "gate3":3}
     
 
     def __init__(self, channel_dict = default_digi_dict, rev_dict = rev_dict, laser_time = 3.5*Q_(1,"us"), aom_lag = .73*Q_(1,"us"), readout_time = .4*Q_(1,"us"),
@@ -357,6 +360,86 @@ class Pulses(Driver):
             return readouts + rabi #setup_high + rabi + setup_low + rabi_D
         seqs = [single_rabi(mw_time) for mw_time in params]#.array]
         return seqs
+
+    def mp(self, pulsetime, laser_level):
+        """
+        Creates microwave pulse sequence. Microwaves are turned on for the pulse time,
+        laser is set to the laser_level, and all of the readout gates are turned off
+
+        Params: pulsetime = duration of the microwave pulse
+                laser_level = analog voltage to control AOM
+        """
+
+        mp = Sequence()
+        mp.setAnalog(self.default_ana_dict["laser"], [(pulsetime, laser_level)])
+        mp.setDigital(list(self.gates_dict.values()), [(pulsetime, 0)])
+        mp.setDigital(self.default_digi_dict["vaunix"], [(pulsetime, 1)])
+        return mp
+
+    def read_and_init_lp(self, readgates, initgates, aomlag, readout, init, buffer, laser_on, laser_off):
+        """
+        Creates pulse sequence consisting of an aomlag, readout, init, and buffer. During the 
+            aomlag only the AOM is turned on. 
+            readout, the laser and the readgates are on. 
+            init the laser and the initgates are on. 
+            buffer everything is turned off.
+        During the whole pulse sequence the microwaves are turned off
+
+        Params: readgates = list of gates to turn on during readout
+                initgates = list of gates to turn on during init
+                aomlag = time to wait for the laser to turn on
+                readout = time to readout PL to the DAQ throgh gates specified by readgates param
+                init = time to initialize qubit state and 
+                    readout PL to the DAQ throgh gates specified by readgates param
+                buffer = time to wait for the laser to turn off
+                laser_on = voltage to analog AOM during aomlag, readout, and init
+                laser_off = voltage to analog AOM during buffer
+        """
+        
+        aomlagseq = Sequence()
+        aomlagseq.setDigital(list(self.gates_dict.values()), [(aomlag,0)])
+        readoutseq = Sequence()
+        readoutseq.setDigital(readgates, [(readout, 1)])
+        readoutseq.setDigital([digi for digi in list(self.gates_dict.values()) if digi not in readgates], [(readout, 0)])
+        initseq = Sequence()
+        initseq.setDigital(initgates, [(init, 1)])
+        initseq.setDigital([digi for digi in list(self.gates_dict.values()) if digi not in initgates], [(init, 0)])
+        bufferseq = Sequence()
+        bufferseq.setDigital(list(self.gates_dict.values()), [(buffer,0)])
+        
+        lp = Sequence()
+        lp = aomlagseq + readoutseq + initseq + bufferseq
+        lp.setAnalog(self.default_ana_dict["laser"], [(aomlag + readout + init, laser_on), (buffer, laser_off)])
+        lp.setDigital(self.default_digi_dict["vaunix"], [(aomlag, 0), (readout, 0), (init, 0), (buffer, 0)])
+        
+        return lp
+
+    def wait(self, tau, laser_level):
+        """
+        Creates sequence of total time tau where all digital channels are off and the laser is set to laser_level
+
+        Params: tau = total time of sequence
+                laser_level = time of 
+        """
+
+        wait = Sequence()
+        wait.setAnalog(self.default_ana_dict["laser"], [(tau, laser_level)])
+        wait.setDigital(list(self.default_digi_dict.values()), [(tau, 0)])
+
+        return wait
+
+    def t1_pi_pulse(self, readgates1, readgates2, initgates, \
+        aomlag, readout, init, buffer, tau1, tau2, pitime, laser_on, laser_off):
+        """
+        Creates T1 sequence with a pi pulse for population inversion. 
+        """
+        firstrilp = self.read_and_init_lp(readgates1, initgates, aomlag, readout, init, buffer, laser_on, laser_off)
+        wait1 = self.wait(tau1, laser_off)
+        secondrilp = self.read_and_init_lp(readgates2, initgates, aomlag, readout, init, buffer, laser_on, laser_off)
+        pi = self.mp(pitime, laser_off)
+        wait2 = self.wait(tau2, laser_off)
+
+        return firstrilp + wait1 + secondrilp + pi + wait2
 
     # def Diff_Rabi_bluecharge(self, params, pi_xy):
     #     longest_time = int(round(params["stop"].to("ns").magnitude))
